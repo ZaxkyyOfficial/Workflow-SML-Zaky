@@ -3,55 +3,59 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 import joblib
 import mlflow
+import mlflow.sklearn
 import os
-import automate_Zaky as az
+import automate_Zaky as az # <--- Ini memanggil file automate kamu yang sudah benar tadi
+import dagshub
 
-# --- BAGIAN PENTING: Setup MLflow Tanpa Login Browser ---
-# Kita ambil alamat server langsung dari "Secrets" yang sudah diset di GitHub
-uri = os.environ.get("MLFLOW_TRACKING_URI")
-if uri:
-    mlflow.set_tracking_uri(uri)
-    print(f"MLflow Tracking URI diset ke: {uri}")
-else:
-    print("PERINGATAN: MLFLOW_TRACKING_URI tidak ditemukan di Environment!")
+# --- SETUP DAGSHUB (Biar connect ke repo kamu) ---
+# Ganti nama repo/owner jika perlu, tapi biasanya ini sudah cukup
+try:
+    dagshub.init(repo_owner='arifiyantobahtyar', repo_name='Eksperimen_SML_Zaky', mlflow=True)
+except:
+    pass
 
 # Set nama eksperimen
-mlflow.set_experiment("Bank_Marketing_Simple_Train")
+mlflow.set_experiment("Bank_Marketing_Artifact_Fix")
 
-def train_simple_model():
-    print("Memulai Training Sederhana...")
+def train_model():
+    print("🚀 Memulai Training...")
     
-    # 1. Load Data
-    try:
-        df = az.load_data()
-        X_train, X_test, y_train, y_test = az.preprocess_data(df)
-    except Exception as e:
-        print(f"Error saat load data: {e}")
+    # 1. Panggil fungsi dari automate_Zaky.py
+    # Karena automate kamu membaca file lokal, pastikan folder data_raw dan bank.csv ada
+    df = az.load_data()
+    if df is None:
+        print("❌ Gagal load data. Pastikan folder data_raw/bank.csv ada.")
         return
+        
+    X_train, X_test, y_train, y_test = az.preprocess_data(df)
 
-    # 2. Mulai MLflow Run
-    # Gunakan environment variable MLFLOW_TRACKING_USERNAME & PASSWORD otomatis
-    print("Mulai logging ke DagsHub...")
-    
-    with mlflow.start_run(run_name="CI_Pipeline_Run"):
-        # Auto-log parameter & metrics
+    # 2. Mulai MLflow Run (DENGAN ARTEFAK LENGKAP)
+    with mlflow.start_run(run_name="Run_Generate_Artifacts"):
+        
+        # Aktifkan Autolog (untuk grafik)
         mlflow.sklearn.autolog()
 
         # Train Model
+        print("⚙️ Sedang melatih model...")
         model = RandomForestClassifier(n_estimators=10, random_state=42)
         model.fit(X_train, y_train)
         
         # Evaluasi
         y_pred = model.predict(X_test)
         acc = accuracy_score(y_test, y_pred)
-        print(f"Akurasi Model: {acc}")
+        print(f"✅ Akurasi Model: {acc}")
 
-        # 3. Simpan Model Lokal (Untuk Artifact)
-        joblib.dump(model, "model_bank.pkl")
-        print("Model berhasil disimpan sebagai 'model_bank.pkl'")
+        # --- [INI KUNCINYA AGAR ARTEFAK MUNCUL] ---
+        print("📦 Sedang mengemas Artefak (conda.yaml, MLmodel, dll)...")
         
-        # Log model ke MLflow (Opsional, biar muncul di tab Models DagsHub)
-        mlflow.sklearn.log_model(model, "model_random_forest")
+        # Perintah ini memaksa MLflow membuat folder 'model' berisi semua file yang diminta reviewer
+        mlflow.sklearn.log_model(
+            sk_model=model,
+            artifact_path="model",       # Nama folder di DagsHub nanti
+            registered_model_name="BankMarketingModel" 
+        )
+        print("🎉 Selesai! Cek folder 'model' di tab Artifacts DagsHub sekarang.")
 
 if __name__ == "__main__":
-    train_simple_model()
+    train_model()
