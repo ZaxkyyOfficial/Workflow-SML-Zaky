@@ -7,12 +7,22 @@ import mlflow.sklearn
 import os
 import automate_Zaky as az 
 
-# Set nama eksperimen
-mlflow.set_experiment("Bank_Marketing_Artifact_Fix")
-
 def train_model():
     print("🚀 Memulai Training...")
-    
+
+    # --- LOGIKA BARU: DETEKSI ENVIRONMENT ---
+    # Cek apakah script ini dijalankan oleh 'mlflow run' (GitHub Actions)
+    # Jika ya, environment variable MLFLOW_RUN_ID pasti ada.
+    in_mlflow_run = os.environ.get("MLFLOW_RUN_ID") is not None
+
+    if in_mlflow_run:
+        print("ℹ️ Terdeteksi berjalan via MLflow Run (CI/CD).")
+        # JANGAN set_experiment di sini, karena akan bentrok dengan Run ID dari GitHub
+    else:
+        print("ℹ️ Terdeteksi berjalan Manual (Lokal).")
+        # Hanya set experiment jika jalan di laptop sendiri
+        mlflow.set_experiment("Bank_Marketing_Artifact_Fix")
+
     # 1. Panggil fungsi dari automate_Zaky.py
     df = az.load_data()
     if df is None:
@@ -21,46 +31,39 @@ def train_model():
         
     X_train, X_test, y_train, y_test = az.preprocess_data(df)
 
-    # 2. LOGIKA BARU: Cek Active Run (Solusi Error Double Login)
-    # Jika dijalankan lewat 'mlflow run' (GitHub Actions), ini akan True
-    if mlflow.active_run():
-        print(f"ℹ️ Active Run terdeteksi (ID: {mlflow.active_run().info.run_id}). Menggunakan sesi ini.")
-    else:
-        # Jika dijalankan manual di laptop, kita start run baru
-        print("ℹ️ Tidak ada Active Run. Memulai Run baru secara lokal...")
-        mlflow.start_run(run_name="Run_Generate_Artifacts")
+    # 2. KONFIGURASI START RUN
+    # Jika di CI/CD: start_run() kosong akan otomatis 'nempel' ke Run ID yang sudah dibuat GitHub
+    # Jika di Lokal: kita beri nama run baru
+    run_context = mlflow.start_run() if in_mlflow_run else mlflow.start_run(run_name="Run_Generate_Artifacts")
 
-    # --- Mulai Proses Training & Logging (Perhatikan indentasi sudah rata kiri) ---
-    try:
-        # Aktifkan Autolog
-        mlflow.sklearn.autolog()
+    with run_context:
+        try:
+            # Aktifkan Autolog
+            mlflow.sklearn.autolog()
 
-        # Train Model
-        print("⚙️ Sedang melatih model...")
-        model = RandomForestClassifier(n_estimators=10, random_state=42)
-        model.fit(X_train, y_train)
-        
-        # Evaluasi
-        y_pred = model.predict(X_test)
-        acc = accuracy_score(y_test, y_pred)
-        print(f"✅ Akurasi Model: {acc}")
+            # Train Model
+            print("⚙️ Sedang melatih model...")
+            model = RandomForestClassifier(n_estimators=10, random_state=42)
+            model.fit(X_train, y_train)
+            
+            # Evaluasi
+            y_pred = model.predict(X_test)
+            acc = accuracy_score(y_test, y_pred)
+            print(f"✅ Akurasi Model: {acc}")
 
-        # --- [LOG ARTEFAK] ---
-        print("📦 Sedang mengemas Artefak (conda.yaml, MLmodel, dll)...")
-        
-        mlflow.sklearn.log_model(
-            sk_model=model,
-            artifact_path="model",       # Nama folder di DagsHub
-            registered_model_name="BankMarketingModel" 
-        )
-        print("🎉 Selesai! Cek folder 'model' di tab Artifacts DagsHub sekarang.")
-        
-    except Exception as e:
-        print(f"❌ Terjadi error: {e}")
-    finally:
-        # Menutup run jika kita yang membuatnya secara manual
-        # (mlflow run akan menutupnya otomatis, tapi ini good practice)
-        mlflow.end_run()
+            # --- [LOG ARTEFAK] ---
+            print("📦 Sedang mengemas Artefak...")
+            
+            mlflow.sklearn.log_model(
+                sk_model=model,
+                artifact_path="model",       
+                registered_model_name="BankMarketingModel" 
+            )
+            print("🎉 Selesai! Cek DagsHub sekarang.")
+            
+        except Exception as e:
+            print(f"❌ Terjadi error saat logging: {e}")
+            raise e
 
 if __name__ == "__main__":
     train_model()
