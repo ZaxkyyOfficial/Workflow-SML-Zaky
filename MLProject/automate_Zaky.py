@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
-import os
+import requests
+import zipfile
+import io
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, OneHotEncoder, LabelEncoder
 from sklearn.impute import SimpleImputer
@@ -9,42 +11,33 @@ from sklearn.pipeline import Pipeline
 
 def load_data():
     """
-    Fungsi untuk memuat dataset dari folder lokal data_raw.
+    Fungsi untuk memuat dataset Bank Marketing dari UCI.
     """
-    # Sesuaikan nama file jika yang kamu punya adalah bank-additional-full.csv
-    path = 'data_raw/bank.csv' 
-    
-    print(f"Mencoba memuat data dari {path}...")
-    if os.path.exists(path):
-        # Separator bank.csv biasanya titik koma (;)
-        df = pd.read_csv(path, sep=';') 
+    url = "https://archive.ics.uci.edu/ml/machine-learning-databases/00222/bank-additional.zip"
+    print("Mengunduh dataset...")
+    try:
+        response = requests.get(url)
+        z = zipfile.ZipFile(io.BytesIO(response.content))
+        z.extractall()
+        # Membaca file (separator adalah titik koma)
+        df = pd.read_csv('bank-additional/bank-additional-full.csv', sep=';')
         print("Dataset berhasil dimuat.")
         return df
-    else:
-        print(f"ERROR: File tidak ditemukan di {path}")
-        print("Pastikan folder 'data_raw' ada dan berisi file csv.")
+    except Exception as e:
+        print(f"Error loading data: {e}")
         return None
 
 def preprocess_data(df):
     """
-    Membersihkan data, MENYIMPAN HASIL CLEANING, dan melakukan scaling/encoding.
+    Fungsi untuk membersihkan data, encoding, dan scaling.
+    Mengembalikan X_train, X_test, y_train, y_test yang siap latih.
     """
-    print("Memulai Preprocessing...")
-
     # 1. Handling Duplicates
     df = df.drop_duplicates()
     
     # 2. Handling 'unknown' -> NaN
     df.replace('unknown', np.nan, inplace=True)
     
-    # --- [BAGIAN WAJIB DARI REVIEWER: SIMPAN DATA BERSIH] ---
-    # Kita simpan data yang sudah bersih (no duplicates, handled unknown) sebelum di-split
-    os.makedirs('preprocessing', exist_ok=True)
-    clean_path = 'preprocessing/clean_data.csv'
-    df.to_csv(clean_path, index=False)
-    print(f"Data bersih berhasil disimpan di: {clean_path}")
-    # --------------------------------------------------------
-
     # 3. Pisahkan Fitur dan Target
     target_col = 'y'
     if target_col not in df.columns:
@@ -58,12 +51,11 @@ def preprocess_data(df):
     y = le.fit_transform(y)
     
     # 5. Split Data (Stratified)
-    # Penting: Split dulu baru scaling/encoding untuk mencegah Data Leakage
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
     )
     
-    # 6. Pipeline Preprocessing (Standard Industri)
+    # 6. Pipeline Preprocessing
     numeric_features = X.select_dtypes(include=['int64', 'float64']).columns
     categorical_features = X.select_dtypes(include=['object']).columns
     
@@ -85,7 +77,7 @@ def preprocess_data(df):
         verbose_feature_names_out=False
     )
     
-    # Agar output tetap pandas DataFrame (memudahkan debug)
+    # Agar output tetap pandas DataFrame
     preprocessor.set_output(transform="pandas")
     
     # Fit & Transform
@@ -98,8 +90,8 @@ def preprocess_data(df):
     return X_train_processed, X_test_processed, y_train, y_test
 
 if __name__ == "__main__":
-    # Blok ini dijalankan jika file dieksekusi langsung
+    # Blok ini hanya berjalan jika file dieksekusi langsung (python automate_Zaky.py)
     df = load_data()
     if df is not None:
         X_train, X_test, y_train, y_test = preprocess_data(df)
-        print("Automasi Preprocessing Berhasil!")
+        print("Automasi berhasil!")

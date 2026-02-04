@@ -1,0 +1,19 @@
+name: bank_marketing_env
+channels:
+  - conda-forge
+dependencies:
+  - python=3.9
+  - pip
+  - pip:
+      - pandas
+      - numpy
+      - scikit-learn
+      - joblib
+      - mlflow
+      - dagshub
+      - matplotlib
+      - seaborn
+      - flask
+      - prometheus_client
+      - psutil
+      - requests
