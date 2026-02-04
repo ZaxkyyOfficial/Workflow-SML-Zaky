@@ -9,9 +9,17 @@ jobs:
   build-and-train:
     runs-on: ubuntu-latest
 
+    # Menambahkan defaults agar semua step 'run' otomatis masuk ke folder MLProject
+    defaults:
+      run:
+        working-directory: ./MLProject
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
+        with:
+          # Memastikan file di luar folder (seperti data_raw) juga terbawa jika dibutuhkan
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -30,4 +38,5 @@ jobs:
           MLFLOW_TRACKING_USERNAME: ${{ secrets.DAGSHUB_TOKEN }}
           MLFLOW_TRACKING_PASSWORD: ${{ secrets.DAGSHUB_TOKEN }}
         run: |
+          # Sekarang Python akan menemukan modelling.py dan automate_Zaky.py di folder yang sama
           python modelling.py
